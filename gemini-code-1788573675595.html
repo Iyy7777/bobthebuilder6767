@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TanskyLab - Print a Photo Puzzle</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<!-- JSZip for 3MF generation (Original) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<!-- Three.js + STLExporter for background 3D file generation (Added) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/STLExporter.js"></script>
+<style>
+  :root{
+    /* Merged Original Variables (adapted for the new light theme look) */
+    --ink:#111827; --ink-dim:#6b7280;
+    --bg:#f9fafb; --panel:#ffffff; --panel-2:#f3f4f6; --line:#e5e7eb;
+    --amber:#f59e0b; --amber-dim:#fef3c7; --cyan:#10b981; --danger:#ef4444;
+    --mono:'IBM Plex Mono', monospace;
+    --sans:'Inter', sans-serif;
+    
+    /* Target UI Variables */
+    --white: #ffffff;
+    --border: #e5e7eb; --border-hover: #d1d5db;
+    --text-main: #111827; --text-muted: #6b7280;
+    --accent: #111827; --accent-light: #f3f4f6;
+  }
+  
+  * { box-sizing: border-box; }
+  body { font-family: var(--sans); margin: 0; background-color: var(--bg); color: var(--text-main); font-size: 14px; min-height: 100vh; }
+  
+  /* Navbar & Stepper from Target UI */
+  .navbar { display: flex; justify-content: space-between; align-items: center; padding: 0 24px; height: 60px; background: var(--white); border-bottom: 1px solid var(--border); font-weight: 500; font-size: 13px; }
+  .nav-brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
+  .nav-brand svg { color: var(--danger); width: 20px; height: 20px; }
+  .nav-links { display: flex; gap: 24px; color: var(--text-main); }
+  .nav-btn { border: 1px solid var(--border); background: var(--white); padding: 6px 16px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+  .nav-btn:hover { background: var(--accent-light); }
+
+  .stepper-container { background: var(--white); border-bottom: 1px solid var(--border); display: flex; justify-content: center; }
+  .stepper { display: flex; width: 100%; max-width: 1200px; }
+  .step { flex: 1; padding: 16px 24px; border-bottom: 2px solid transparent; cursor: pointer; transition: 0.2s; opacity: 0.6; }
+  .step.active { border-bottom-color: var(--accent); opacity: 1; }
+  .step-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; margin-bottom: 4px; }
+  .step.active .step-label { color: var(--accent); }
+  .step-title { font-size: 15px; font-weight: 600; margin-bottom: 2px; }
+  .step-desc { font-size: 12px; color: var(--text-muted); }
+
+  .main-content { max-width: 1000px; margin: 40px auto; padding: 0 24px; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  .section-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  .section-header h2 { margin: 0 0 8px 0; font-size: 24px; font-weight: 700; }
+  .section-header p { margin: 0; color: var(--text-muted); font-size: 14px; }
+
+  /* UI Buttons */
+  .btn-black { background: var(--accent); color: var(--white); border: none; padding: 10px 20px; border-radius: 6px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; transition: 0.2s; }
+  .btn-black:hover:not(:disabled) { opacity: 0.9; }
+  .btn-black:disabled { background: var(--border); color: var(--text-muted); cursor: not-allowed; }
+  .btn-outline { background: var(--white); color: var(--accent); border: 1px solid var(--border); padding: 10px 20px; border-radius: 6px; font-weight: 500; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; justify-content: center;}
+  .btn-outline:hover:not(:disabled) { background: var(--accent-light); }
+  .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+  
+  /* Upload Area representing the Canvas Wrap */
+  .upload-container { background: #111827; border-radius: 12px; min-height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; overflow: hidden; margin-bottom: 12px; border: 1px solid var(--border);}
+  .upload-overlay { position: absolute; top: 24px; left: 24px; z-index: 10; }
+  .upload-overlay input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  #previewCanvas { max-width: 90%; max-height: 90%; margin: auto; border-radius: 4px; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+  
+  .placeholder { color: #9ca3af; font-family: var(--mono); font-size: 13px; text-align: center; padding: 20px; }
+  .placeholder .big { font-size: 40px; display: block; margin-bottom: 14px; opacity: 0.5; }
+
+  /* Form & Settings styles */
+  .tools-panel { background: var(--white); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
+  .tools-row { display: flex; align-items: center; gap: 24px; flex-wrap: wrap;}
+  .tool-label { font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; width: 180px; }
+  
+  .field { margin-bottom: 20px; width: 100%; }
+  .field label { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+  .field label .val { font-family: var(--mono); color: var(--cyan); font-size: 12px; text-transform: none; letter-spacing: 0; }
+  .hint { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.4; }
+  
+  input[type=range] { flex: 1; accent-color: var(--accent); width: 100%; }
+  input[type=number] { width: 100%; background: var(--panel-2); border: 1px solid var(--border); color: var(--text-main); padding: 9px 10px; border-radius: 6px; font-family: var(--mono); font-size: 13px; }
+  
+  /* Shared layout tools */
+  .bottom-bar { display: flex; justify-content: space-between; margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--border); gap: 12px;}
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+  /* Pill groups & Swatches */
+  .pill-group { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pill { flex: 1 1 auto; min-width: 64px; text-align: center; font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 9px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-muted); cursor: pointer; transition: .12s; }
+  .pill:hover { border-color: var(--border-hover); color: var(--text-main); }
+  .pill.active { background: var(--accent); color: var(--white); border-color: var(--accent); }
+  
+  .picker-list { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .picker-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .picker-item input[type=color] { width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 6px; background: none; padding: 0; cursor: pointer; }
+  .picker-item span { font-family: var(--mono); font-size: 9px; color: var(--text-muted); }
+  
+  .tabs-preview { display: flex; gap: 8px; margin-bottom: 16px; justify-content: flex-end;}
+  .tab-btn { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-2); color: var(--text-muted); cursor: pointer; }
+  .tab-btn.active { border-color: var(--cyan); color: var(--cyan); background: var(--white); }
+
+  .stat-bar { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+  .stat { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; flex: 1; min-width: 120px; }
+  .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-muted); font-family: var(--mono); }
+  .stat .v { font-size: 19px; font-weight: 700; font-family: var(--mono); margin-top: 4px; color: var(--cyan); }
+  
+  .progress { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; display: none; margin-top: 16px;}
+  .progress.active { display: block; }
+  .progress .bar { height: 100%; width: 0%; background: var(--amber); transition: width .15s; }
+  .status-line { font-family: var(--mono); font-size: 12px; color: var(--text-muted); min-height: 32px; line-height: 1.5; margin-top: 16px;}
+  .status-line.err { color: var(--danger); }
+  .status-line.ok { color: var(--cyan); }
+</style>
+</head>
+<body>
+
+<div class="navbar">
+    <div class="nav-brand">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2L15 8H21L16 12.5L18 19L12 15L6 19L8 12.5L3 8H9L12 2Z"/></svg>
+        TanskyLab
+    </div>
+    <div class="nav-links">
+        <span style="cursor:pointer">Projects</span>
+        <span style="cursor:pointer">Pricing</span>
+        <span style="cursor:pointer">Dashboard</span>
+        <span style="cursor:pointer">Profile</span>
+        <span style="cursor:pointer">Admin</span>
+    </div>
+    <button class="nav-btn">Sign out</button>
+</div>
+
+<div class="stepper-container">
+    <div class="stepper">
+        <div class="step active" onclick="switchTab(1)" id="step1">
+            <div class="step-label">Step 1</div>
+            <div class="step-title">Photo</div>
+            <div class="step-desc">Upload and crop</div>
+        </div>
+        <div class="step" onclick="switchTab(2)" id="step2">
+            <div class="step-label">Step 2</div>
+            <div class="step-title">Palette</div>
+            <div class="step-desc">Extract colors</div>
+        </div>
+        <div class="step" onclick="switchTab(3)" id="step3">
+            <div class="step-label">Step 3</div>
+            <div class="step-title">Layers & Export</div>
+            <div class="step-desc">Tune and generate</div>
+        </div>
+    </div>
+</div>
+
+<div class="main-content">
+    
+    <!-- Canvas & Progress Area (Visible across all tabs) -->
+    <div class="tabs-preview">
+        <div class="tab-btn active" id="tabAssembled">Assembled preview</div>
+        <div class="tab-btn" id="tabSheet">Separated preview</div>
+    </div>
+    
+    <div class="upload-container" id="canvasWrap">
+        <!-- Floating Dropzone mapped to Target UI upload button -->
+        <div class="upload-overlay" id="dropzone">
+            <button class="btn-black" style="box-shadow: 0 4px 6px rgba(0,0,0,0.3);">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                Choose photo
+                <input type="file" id="fileInput" accept="image/*">
+            </button>
+        </div>
+        <div class="placeholder" id="placeholder"><span class="big">✂</span>Click "Choose photo" or drop an image here.</div>
+        <canvas id="previewCanvas" style="display:none;"></canvas>
+    </div>
+
+    <div class="progress" id="progress"><div class="bar" id="progressBar"></div></div>
+    <div class="status-line" id="statusLine"></div>
+    <div class="stat-bar">
+      <div class="stat"><div class="k">Shape</div><div class="v" id="statShape">—</div></div>
+      <div class="stat"><div class="k">Piece count</div><div class="v" id="statPieces">—</div></div>
+      <div class="stat"><div class="k">Triangles</div><div class="v" id="statTris">—</div></div>
+    </div>
+
+    <!-- Tab 1: Photo -->
+    <div id="content1" class="tab-content active" style="margin-top: 24px;">
+        <div class="section-header">
+            <div>
+                <h2>Step 1: Upload and prep</h2>
+                <p>Upload a photo and let the system automatically trim flat/blank margins.</p>
+            </div>
+            <div style="font-size: 12px; font-weight: 600; color: var(--text-muted);">Max 10 MB</div>
+        </div>
+        
+        <div class="tools-panel">
+            <div class="tools-row">
+                <div class="tool-label">Auto Crop</div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:14px;color:var(--text-main);cursor:pointer;font-weight:500;">
+                    <input type="checkbox" id="autoCropToggle" checked style="width:18px;height:18px;cursor:pointer;">
+                    Auto-trim flat/blank margins from the uploaded image
+                </label>
+            </div>
+        </div>
+        <div class="bottom-bar" style="justify-content: flex-end;">
+            <button class="btn-black" onclick="switchTab(2)">Next: Extract Palette</button>
+        </div>
+    </div>
+
+    <!-- Tab 2: Palette -->
+    <div id="content2" class="tab-content" style="margin-top: 24px;">
+        <div class="section-header">
+            <div>
+                <h2>Step 2: Colors & Theme</h2>
+                <p>Colors are pulled automatically via k-means clustering. You can adjust the quantity or match them manually.</p>
+            </div>
+        </div>
+
+        <div class="tools-panel">
+            <div class="tools-row" style="margin-bottom: 24px;">
+                <div class="tool-label" style="width:100%;">Theme Preview Options</div>
+                <div class="pill-group" id="themePills" style="width:100%;">
+                    <div class="pill" data-theme="light">Light</div>
+                    <div class="pill active" data-theme="dark">Dark</div>
+                    <div class="pill" data-theme="grey">Grey</div>
+                    <div class="pill" data-theme="yellow">Yellow</div>
+                    <div class="pill" data-theme="custom">Custom</div>
+                </div>
+                <div id="customThemeField" style="display:none;margin-top:10px;align-items:center;gap:10px;">
+                    <input type="color" id="customThemeColor" value="#F2A93B">
+                    <span class="hint" style="margin:0;">Pick an accent color.</span>
+                </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--border); margin: 24px 0;"></div>
+
+            <div class="field">
+                <label>Target Colors <span class="val" id="colorsVal">12</span></label>
+                <input type="range" id="colors" min="2" max="32" step="1" value="12">
+                <div class="hint">Adjust the slider to extract more or fewer colors from the photo.</div>
+                <div class="picker-list" id="pickerList"></div>
+            </div>
+            
+            <button class="btn-outline" id="matchColorsBtn" type="button" style="margin-top:12px;">Match colors to photo</button>
+        </div>
+
+        <div class="bottom-bar">
+            <button class="btn-outline" onclick="switchTab(1)">Back to photo</button>
+            <button class="btn-black" onclick="switchTab(3)">Next: Tune layers & Generate</button>
+        </div>
+    </div>
+
+    <!-- Tab 3: Layers & Generate -->
+    <div id="content3" class="tab-content" style="margin-top: 24px;">
+        <div class="section-header">
+            <div>
+                <h2>Step 3: Structure and Export</h2>
+                <p>Tune the shape, complexity, and dimensions before exporting the final 3MF or STL.</p>
+            </div>
+        </div>
+
+        <div class="tools-panel">
+            <div class="field">
+                <label>Piece Shape</label>
+                <div class="pill-group" id="shapePills">
+                    <div class="pill active" data-shape="classic">Classic<br><span style="font-weight:400;font-size:10px;opacity:.75">interlocking</span></div>
+                    <div class="pill" data-shape="grid">Grid<br><span style="font-weight:400;font-size:10px;opacity:.75">straight</span></div>
+                    <div class="pill" data-shape="triangle">Triangle</div>
+                    <div class="pill" data-shape="hexagon">Hexagon</div>
+                </div>
+                <div class="hint" id="shapeHint" style="margin-bottom: 24px;">Classic pieces have true undercuts so they lock together.</div>
+            </div>
+
+            <div class="field">
+                <label>Pieces (target) <span class="val" id="piecesVal">48</span></label>
+                <input type="range" id="pieces" min="6" max="400" step="1" value="48">
+                <div class="hint">The actual piece count may land a little above or below this.</div>
+            </div>
+
+            <div class="field" style="margin-top: 24px;">
+                <label>Internal Detail Size (mm) <span class="val" id="detailVal">2.5</span></label>
+                <input type="range" id="detail" min="1.0" max="8.0" step="0.5" value="2.5">
+                <div class="hint">Controls the internal color resolution inside each piece.</div>
+            </div>
+        </div>
+
+        <div class="tools-panel">
+            <div class="grid-2">
+                <div class="field">
+                    <label>Longest side (cm)</label>
+                    <input type="number" id="sizeCM" value="20" min="3" max="60" step="0.5">
+                </div>
+                <div class="field">
+                    <label>Thickness (cm)</label>
+                    <input type="number" id="thickness" value="0.3" min="0.1" max="1" step="0.05">
+                </div>
+            </div>
+            
+            <div class="field" style="margin-top: 12px;">
+                <label>Top Color Depth (cm) <span class="val" id="colorDepthVal">0.08</span></label>
+                <input type="range" id="colorDepth" min="0.02" max="0.2" step="0.02" value="0.08">
+                <div class="hint">How thick the top photo layer is. Everything underneath prints in a solid base color.</div>
+            </div>
+
+            <div style="border-top: 1px solid var(--border); margin: 24px 0;"></div>
+
+            <div class="field">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;color:var(--text-main);font-size:14px;">
+                    <input type="checkbox" id="exportAssembled" checked style="width:18px;height:18px;cursor:pointer;">
+                    <strong>Export assembled (print in place)</strong>
+                </label>
+                <div class="hint">Uncheck this to lay out the pieces separated on a grid.</div>
+            </div>
+
+            <div class="field" id="gapField" style="display:none; margin-top:12px;">
+                <label>Gap on print bed (cm) <span class="val" id="gapVal">0.20</span></label>
+                <input type="range" id="gap" min="0.05" max="0.6" step="0.05" value="0.2">
+                <div class="hint">The empty space left between separated pieces.</div>
+            </div>
+        </div>
+
+        <div class="bottom-bar">
+            <button class="btn-outline" onclick="switchTab(2)">Back</button>
+            <div style="display:flex; gap:12px;">
+                <button class="btn-black" id="generateBtn" disabled>Generate Puzzle Data</button>
+                <button class="btn-outline" id="downloadBtn" disabled>Download .3mf</button>
+                <!-- NEW Functionality added per request -->
+                <button class="btn-outline" id="downloadSTLBtn" disabled>Download .stl (Basic)</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ================= TABS / STEPPER LOGIC =================
+  window.switchTab = function(tabIndex) {
+      document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+      document.getElementById(`step${tabIndex}`).classList.add('active');
+      document.getElementById(`content${tabIndex}`).classList.add('active');
+  };
+
+  // ================= RNG =================
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ================= color utils =================
+  function hexToRgb(hex){
+    hex = hex.replace('#','');
+    if (hex.length===3) hex = hex.split('').map(c=>c+c).join('');
+    const num = parseInt(hex,16);
+    return [(num>>16)&255,(num>>8)&255,num&255];
+  }
+  function rgbToHex(rgb){ return '#'+rgb.map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join(''); }
+  function rgbToHsl(r,g,b){
+    r/=255; g/=255; b/=255;
+    const max=Math.max(r,g,b), min=Math.min(r,g,b);
+    let h,s,l=(max+min)/2;
+    if (max===min){ h=s=0; }
+    else {
+      const d = max-min;
+      s = l>0.5 ? d/(2-max-min) : d/(max+min);
+      switch(max){
+        case r: h=(g-b)/d+(g<b?6:0); break;
+        case g: h=(b-r)/d+2; break;
+        default: h=(r-g)/d+4;
+      }
+      h/=6;
+    }
+    return [h,s,l];
+  }
+  function hslToRgb(h,s,l){
+    let r,g,b;
+    if (s===0){ r=g=b=l; }
+    else {
+      const hue2rgb=(p,q,t)=>{ if(t<0)t+=1; if(t>1)t-=1; if(t<1/6) return p+(q-p)*6*t; if(t<1/2) return q; if(t<2/3) return p+(q-p)*(2/3-t)*6; return p; };
+      const q = l<0.5 ? l*(1+s) : l+s-l*s;
+      const p = 2*l-q;
+      r = hue2rgb(p,q,h+1/3); g = hue2rgb(p,q,h); b = hue2rgb(p,q,h-1/3);
+    }
+    return [r*255,g*255,b*255];
+  }
+
+  // ================= generic k-means =================
+  function kmeansCluster(samples, K, rng, iters){
+    iters = iters || 8;
+    const dim = samples[0].length;
+    const centroids = [samples[Math.floor(rng()*samples.length)].slice()];
+    while (centroids.length < K){
+      let best=null, bestD=-1;
+      for (let s=0;s<samples.length;s+=3){
+        const sample = samples[s];
+        let dMin = Infinity;
+        for (const c of centroids){
+          let d=0; for (let k=0;k<dim;k++) d += (sample[k]-c[k])**2;
+          if (d<dMin) dMin=d;
+        }
+        if (dMin>bestD){ bestD=dMin; best=sample; }
+      }
+      centroids.push(best.slice());
+    }
+    for (let iter=0; iter<iters; iter++){
+      const sums = centroids.map(()=>new Array(dim+1).fill(0));
+      for (const s of samples){
+        let bi=0, bd=Infinity;
+        for (let k=0;k<centroids.length;k++){
+          const c = centroids[k]; let d=0;
+          for (let x=0;x<dim;x++) d += (s[x]-c[x])**2;
+          if (d<bd){ bd=d; bi=k; }
+        }
+        for (let x=0;x<dim;x++) sums[bi][x]+=s[x];
+        sums[bi][dim]++;
+      }
+      for (let k=0;k<centroids.length;k++){
+        if (sums[k][dim]>0) for (let x=0;x<dim;x++) centroids[k][x]=sums[k][x]/sums[k][dim];
+      }
+    }
+    return centroids;
+  }
+
+  function nearestAssign(imgData, w, h, palette){
+    const px = imgData.data;
+    const n = w*h;
+    const indexMap = new Uint8Array(n);
+    for (let i=0;i<n;i++){
+      const r=px[i*4], g=px[i*4+1], b=px[i*4+2];
+      let bi=0, bd=Infinity;
+      for (let k=0;k<palette.length;k++){
+        const c = palette[k];
+        const d = (r-c[0])**2+(g-c[1])**2+(b-c[2])**2;
+        if (d<bd){ bd=d; bi=k; }
+      }
+      indexMap[i]=bi;
+    }
+    return indexMap;
+  }
+
+  function photoPaletteHexes(K){
+    if (!state.img) return null;
+    const maxDim = 150;
+    const scale = Math.min(1, maxDim/Math.max(state.imgW, state.imgH));
+    const w = Math.max(4, Math.round(state.imgW*scale)), h = Math.max(4, Math.round(state.imgH*scale));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.drawImage(state.img, 0, 0, w, h);
+    const imgData = ctx.getImageData(0,0,w,h);
+    const px = imgData.data;
+    const n = w*h;
+    const samples = [];
+    for (let i=0;i<n;i++) samples.push([px[i*4], px[i*4+1], px[i*4+2]]);
+    const rng = mulberry32(2024);
+    const centroids = kmeansCluster(samples, Math.min(K, samples.length), rng, 10);
+    centroids.sort((a,b)=> (0.299*a[0]+0.587*a[1]+0.114*a[2]) - (0.299*b[0]+0.587*b[1]+0.114*b[2]));
+    return centroids.map(rgbToHex);
+  }
+
+  // ================= piece geometry =================
+  function tabCurve(p0, p1, sign, rng, tabSize){
+    const dx = p1.x-p0.x, dy = p1.y-p0.y;
+    const len = Math.hypot(dx,dy);
+    const ux = dx/len, uy = dy/len;
+    const px = -uy, py = ux;
+    
+    // True interlocking mushroom tab with undercuts to physically lock the pieces
+    const amp = sign * tabSize * 0.9; 
+    
+    // Coordinates mapping a perfectly symmetric, round-headed jigsaw ear
+    const ts =   [0, 0.35, 0.40, 0.42, 0.37, 0.31, 0.33, 0.40, 0.50, 0.60, 0.67, 0.69, 0.63, 0.58, 0.60, 0.65, 1];
+    const offs = [0, 0,    0.05, 0.15, 0.30, 0.50, 0.70, 0.85, 0.95, 0.85, 0.70, 0.50, 0.30, 0.15, 0.05, 0,    0];
+
+    const pts = [];
+    for (let i = 0; i < ts.length; i++){
+      const t = ts[i];
+      const off = offs[i] * amp; 
+      const bx = p0.x + ux * len * t;
+      const by = p0.y + uy * len * t;
+      pts.push({x: bx + px * off, y: by + py * off});
+    }
+    return pts;
+  }
+  
+  function straightLine(p0,p1){ return [p0,p1]; }
+  function reversedArr(a){ return a.slice().reverse(); }
+
+  function buildGrid(rows, cols, w, h, rng, tabSize, useTabs){
+    const pt = (r,c)=>({x:c*w/cols, y:r*h/rows});
+    const H=[], V=[];
+    for (let r=0;r<=rows;r++){
+      H[r]=[];
+      for (let c=0;c<cols;c++){
+        const p0=pt(r,c), p1=pt(r,c+1);
+        H[r][c] = (!useTabs || r===0 || r===rows) ? straightLine(p0,p1) : tabCurve(p0,p1, rng()<0.5?1:-1, rng, tabSize);
+      }
+    }
+    for (let r=0;r<rows;r++){
+      V[r]=[];
+      for (let c=0;c<=cols;c++){
+        const p0=pt(r,c), p1=pt(r+1,c);
+        V[r][c] = (!useTabs || c===0 || c===cols) ? straightLine(p0,p1) : tabCurve(p0,p1, rng()<0.5?1:-1, rng, tabSize);
+      }
+    }
+    return {H,V,pt};
+  }
+  function buildPiecePolygon(H,V,r,c){
+    const top=H[r][c], right=V[r][c+1], bottom=reversedArr(H[r+1][c]), left=reversedArr(V[r][c]);
+    const poly=[];
+    for (const part of [top,right,bottom,left]) for (let i=0;i<part.length-1;i++) poly.push(part[i]);
+    return poly;
+  }
+
+  function generateTrianglePieces(rows, cols, W, H){
+    const pt=(r,c)=>({x:c*W/cols, y:r*H/rows});
+    const polys=[];
+    for (let r=0;r<rows;r++){
+      for (let c=0;c<cols;c++){
+        const TL=pt(r,c), TR=pt(r,c+1), BL=pt(r+1,c), BR=pt(r+1,c+1);
+        if ((r+c)%2===0){ polys.push([TL,TR,BR]); polys.push([TL,BR,BL]); }
+        else { polys.push([TL,TR,BL]); polys.push([TR,BR,BL]); }
+      }
+    }
+    return polys;
+  }
+  function intersectX(a,b,x){ const t=(x-a.x)/(b.x-a.x); return {x, y:a.y+t*(b.y-a.y)}; }
+  function intersectY(a,b,y){ const t=(y-a.y)/(b.y-a.y); return {x:a.x+t*(b.x-a.x), y}; }
+  function clipPolygonToRect(poly, W, H){
+    const planes = [
+      {inside:p=>p.x>=-1e-6, intersect:(a,b)=>intersectX(a,b,0)},
+      {inside:p=>p.x<=W+1e-6, intersect:(a,b)=>intersectX(a,b,W)},
+      {inside:p=>p.y>=-1e-6, intersect:(a,b)=>intersectY(a,b,0)},
+      {inside:p=>p.y<=H+1e-6, intersect:(a,b)=>intersectY(a,b,H)},
+    ];
+    let output = poly;
+    for (const plane of planes){
+      if (output.length===0) break;
+      const input = output; output=[];
+      for (let i=0;i<input.length;i++){
+        const curr=input[i], prev=input[(i-1+input.length)%input.length];
+        const currIn=plane.inside(curr), prevIn=plane.inside(prev);
+        if (currIn){ if (!prevIn) output.push(plane.intersect(prev,curr)); output.push(curr); }
+        else if (prevIn){ output.push(plane.intersect(prev,curr)); }
+      }
+    }
+    return output;
+  }
+  function polygonArea(pts){
+    let a=0;
+    for (let i=0;i<pts.length;i++){ const p1=pts[i], p2=pts[(i+1)%pts.length]; a += p1.x*p2.y-p2.x*p1.y; }
+    return a/2;
+  }
+  function generateHexPieces(W, H, targetCount){
+    const size = Math.sqrt((W*H)/(targetCount*1.5*Math.sqrt(3)));
+    const rows = Math.ceil(H/(1.5*size))+2;
+    const cols = Math.ceil(W/(Math.sqrt(3)*size))+2;
+    const polys = [];
+    for (let j=-1;j<=rows;j++){
+      for (let i=-1;i<=cols;i++){
+        const y = j*1.5*size;
+        const xOff = (((j%2)+2)%2===0) ? 0 : (Math.sqrt(3)*size/2);
+        const x = i*Math.sqrt(3)*size + xOff;
+        if (x<-size*2 || x>W+size*2 || y<-size*2 || y>H+size*2) continue;
+        const hexPts = [];
+        for (let k=0;k<6;k++){
+          const ang = Math.PI/180*(60*k-30);
+          hexPts.push({x:x+size*Math.cos(ang), y:y+size*Math.sin(ang)});
+        }
+        const clipped = clipPolygonToRect(hexPts, W, H);
+        if (clipped.length>=3 && Math.abs(polygonArea(clipped))>1e-3) polys.push(clipped);
+      }
+    }
+    return polys;
+  }
+
+  // ================= ear-clip triangulation =================
+  function isConvexTri(a,b,c){ return ((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x))>0; }
+  function pointInTriangle(p,a,b,c){
+    const d1=(p.x-b.x)*(a.y-b.y)-(a.x-b.x)*(p.y-b.y);
+    const d2=(p.x-c.x)*(b.y-c.y)-(b.x-c.x)*(p.y-c.y);
+    const d3=(p.x-a.x)*(c.y-a.y)-(c.x-a.x)*(p.y-a.y);
+    const hasNeg=(d1<0)||(d2<0)||(d3<0), hasPos=(d1>0)||(d2>0)||(d3>0);
+    return !(hasNeg && hasPos);
+  }
+  function earClip(pts){
+    const idx = pts.map((_,i)=>i);
+    const tris = [];
+    let guard = 0;
+    while (idx.length>3 && guard<20000){
+      guard++;
+      let found=false;
+      for (let i=0;i<idx.length;i++){
+        const i0=idx[(i-1+idx.length)%idx.length], i1=idx[i], i2=idx[(i+1)%idx.length];
+        const a=pts[i0], b=pts[i1], c=pts[i2];
+        if (!isConvexTri(a,b,c)) continue;
+        let ok=true;
+        for (let j=0;j<idx.length;j++){
+          const pj=idx[j];
+          if (pj===i0||pj===i1||pj===i2) continue;
+          if (pointInTriangle(pts[pj],a,b,c)){ ok=false; break; }
+        }
+        if (ok){ tris.push([i0,i1,i2]); idx.splice(i,1); found=true; break; }
+      }
+      if (!found) break;
+    }
+    if (idx.length===3) tris.push([idx[0],idx[1],idx[2]]);
+    return tris;
+  }
+
+  // Subdivide triangles recursively to achieve fine internal color resolution
+  function subdivideTriangle(a, b, c, maxLen, result) {
+    const dAB = Math.hypot(b.x - a.x, b.y - a.y);
+    const dBC = Math.hypot(c.x - b.x, c.y - b.y);
+    const dCA = Math.hypot(a.x - c.x, a.y - c.y);
+    const maxD = Math.max(dAB, dBC, dCA);
+
+    if (maxD <= maxLen) {
+      result.push([a, b, c]);
+      return;
+    }
+
+    if (maxD === dAB) {
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      subdivideTriangle(a, mid, c, maxLen, result);
+      subdivideTriangle(mid, b, c, maxLen, result);
+    } else if (maxD === dBC) {
+      const mid = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+      subdivideTriangle(a, b, mid, maxLen, result);
+      subdivideTriangle(a, mid, c, maxLen, result);
+    } else {
+      const mid = { x: (c.x + a.x) / 2, y: (c.y + a.y) / 2 };
+      subdivideTriangle(a, b, mid, maxLen, result);
+      subdivideTriangle(mid, b, c, maxLen, result);
+    }
+  }
+
+  // ================= app state =================
+  const state = {
+    img:null, imgW:0, imgH:0, sourceImg:null,
+    shape:'classic',
+    customColors:[],
+    puzzle:null,
+    viewMode: 'assembled'
+  };
+  const DEFAULT_HUES = [8,45,140,190,260,320,20,90,170,220,290,350];
+
+  const el = id => document.getElementById(id);
+  const fileInput = el('fileInput'), dropzone = el('dropzone');
+  const piecesSlider = el('pieces'), colorsSlider = el('colors'), detailSlider = el('detail');
+  const piecesVal = el('piecesVal'), colorsVal = el('colorsVal'), detailVal = el('detailVal');
+  const colorDepthSlider = el('colorDepth'), colorDepthVal = el('colorDepthVal');
+  const generateBtn = el('generateBtn'), downloadBtn = el('downloadBtn');
+  const downloadSTLBtn = el('downloadSTLBtn'); // Added basic STL functionality mapping
+  const previewCanvas = el('previewCanvas'), placeholder = el('placeholder');
+  const statusLine = el('statusLine'), progress = el('progress'), progressBar = el('progressBar');
+  const pickerListEl = el('pickerList'), matchColorsBtn = el('matchColorsBtn');
+  const shapeHint = el('shapeHint');
+  const tabAssembled = el('tabAssembled'), tabSheet = el('tabSheet');
+  
+  // Toggles
+  const exportAssembledToggle = el('exportAssembled'), gapField = el('gapField');
+  const gapSlider = el('gap'), gapVal = el('gapVal');
+
+  piecesSlider.addEventListener('input', ()=> piecesVal.textContent = piecesSlider.value);
+  colorsSlider.addEventListener('input', ()=>{ colorsVal.textContent = colorsSlider.value; renderColorPickers(); });
+  detailSlider.addEventListener('input', ()=> detailVal.textContent = parseFloat(detailSlider.value).toFixed(1));
+  colorDepthSlider.addEventListener('input', ()=> colorDepthVal.textContent = parseFloat(colorDepthSlider.value).toFixed(2));
+  
+  if (gapSlider) {
+    gapSlider.addEventListener('input', ()=> gapVal.textContent = parseFloat(gapSlider.value).toFixed(2));
+  }
+  
+  exportAssembledToggle.addEventListener('change', () => {
+    gapField.style.display = exportAssembledToggle.checked ? 'none' : 'block';
+  });
+
+  const shapeHints = {
+    classic: "Classic pieces have true undercuts so they lock together.",
+    grid: "Straight-edged rectangular pieces — simple squares/rectangles, no interlocking tabs.",
+    triangle: "Each grid cell is split into two triangles, alternating direction for a herringbone look.",
+    hexagon: "Honeycomb tiling. Edge pieces are clipped to the photo's border, so they may be irregular slivers."
+  };
+
+  const THEMES = {
+    dark:  { bg:'#121316', panel:'#1A1C21', panel2:'#202329', line:'#2C2F36', ink:'#EDEAE1', inkDim:'#9BA0A8', amber:'#F2A93B', amberDim:'#7A5A25', cyan:'#54D6C9', danger:'#E1614F' },
+    light: { bg:'#F7F5F0', panel:'#FFFFFF', panel2:'#F0ECE3', line:'#DCD6C8', ink:'#211D14', inkDim:'#71695A', amber:'#C1611B', amberDim:'#EAC79A', cyan:'#0E8C82', danger:'#C23B2B' },
+    grey:  { bg:'#232427', panel:'#2C2D31', panel2:'#34353A', line:'#42434A', ink:'#E7E7E9', inkDim:'#9A9BA1', amber:'#C7C8CD', amberDim:'#55565C', cyan:'#8B94A0', danger:'#D9736A' },
+    yellow:{ bg:'#FBF4D9', panel:'#FFFFFF', panel2:'#FCEDA8', line:'#EBD976', ink:'#2B2200', inkDim:'#83741F', amber:'#EBB800', amberDim:'#FCE98A', cyan:'#B98600', danger:'#C94A32' },
+  };
+  function applyTheme(name, customHex){
+    let vars;
+    if (name === 'custom'){
+      const accent = hexToRgb(customHex || '#F2A93B');
+      const [h,s,l] = rgbToHsl(accent[0], accent[1], accent[2]);
+      const amberDim = rgbToHex(hslToRgb(h, s*0.55, Math.min(0.85, l+0.28)));
+      const cyan = rgbToHex(hslToRgb((h+150/360)%1, Math.max(0.35,s), Math.max(0.45,Math.min(0.7,l))));
+      vars = Object.assign({}, THEMES.dark, { amber: customHex, amberDim, cyan });
+    } else {
+      vars = THEMES[name] || THEMES.dark;
+    }
+    const root = document.documentElement.style;
+    // Map theme elements locally to the upload container area
+    document.getElementById('canvasWrap').style.backgroundColor = vars.bg;
+  }
+
+  const customThemeField = document.getElementById('customThemeField');
+  const customThemeColor = document.getElementById('customThemeColor');
+  document.querySelectorAll('#themePills .pill').forEach(p=>{
+    p.addEventListener('click', ()=>{
+      document.querySelectorAll('#themePills .pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      const name = p.dataset.theme;
+      customThemeField.style.display = (name === 'custom') ? 'flex' : 'none';
+      applyTheme(name, customThemeColor.value);
+    });
+  });
+  customThemeColor.addEventListener('input', ()=> applyTheme('custom', customThemeColor.value));
+
+  document.querySelectorAll('#shapePills .pill').forEach(p=>{
+    p.addEventListener('click', ()=>{
+      document.querySelectorAll('#shapePills .pill').forEach(x=>x.classList.remove('active'));
+      p.classList.add('active');
+      state.shape = p.dataset.shape;
+      shapeHint.textContent = shapeHints[state.shape];
+    });
+  });
+
+  function renderColorPickers(){
+    const K = parseInt(colorsSlider.value,10);
+    const existing = state.customColors.slice();
+    const suggested = photoPaletteHexes(K);
+    pickerListEl.innerHTML = '';
+    const colors = [];
+    for (let i=0;i<K;i++){
+      let hex = existing[i];
+      if (!hex){
+        if (suggested && suggested[i]) hex = suggested[i];
+        else {
+          const hue = DEFAULT_HUES[i % DEFAULT_HUES.length];
+          hex = rgbToHex(hslToRgb(hue/360, 0.62, 0.52));
+        }
+      }
+      colors.push(hex);
+      const wrap = document.createElement('div');
+      wrap.className = 'picker-item';
+      const input = document.createElement('input');
+      input.type = 'color'; input.value = hex;
+      input.addEventListener('input', ()=>{ state.customColors[i] = input.value; });
+      const label = document.createElement('span');
+      label.textContent = i+1;
+      wrap.appendChild(input); wrap.appendChild(label);
+      pickerListEl.appendChild(wrap);
+    }
+    state.customColors = colors;
+  }
+
+  matchColorsBtn.addEventListener('click', ()=>{
+    if (!state.img){ setStatus('Upload a photo first, then match colors to it.', 'err'); return; }
+    state.customColors = [];
+    renderColorPickers();
+  });
+
+  const autoCropToggle = el('autoCropToggle');
+  autoCropToggle.addEventListener('change', ()=>{
+    if (!state.sourceImg) return;
+    const { canvas, cropped } = autoCropToggle.checked ? autoCropToContent(state.sourceImg) : {canvas: imgToCanvas(state.sourceImg), cropped:false};
+    state.img = canvas; state.imgW = canvas.width; state.imgH = canvas.height;
+    drawRawPreview();
+    state.customColors = [];
+    renderColorPickers();
+    state.puzzle = null;
+    downloadBtn.disabled = true;
+    downloadSTLBtn.disabled = true;
+    setStatus(cropped ? `Trimmed to ${state.imgW}×${state.imgH}. Adjust parameters, then generate.` : `Using the full ${state.imgW}×${state.imgH} photo, untrimmed. Adjust parameters, then generate.`, '');
+  });
+
+  // Tab listeners
+  tabAssembled.addEventListener('click', ()=>{ 
+    state.viewMode='assembled'; 
+    tabAssembled.classList.add('active'); 
+    tabSheet.classList.remove('active'); 
+    if (state.puzzle) renderPreview(); 
+  });
+  tabSheet.addEventListener('click', ()=>{ 
+    state.viewMode='sheet'; 
+    tabSheet.classList.add('active'); 
+    tabAssembled.classList.remove('active'); 
+    if (state.puzzle) renderPreview(); 
+  });
+
+  dropzone.addEventListener('click', ()=> fileInput.click());
+  ['dragover','dragenter'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.style.opacity="0.8"; }));
+  ['dragleave','drop'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.style.opacity="1"; }));
+  dropzone.addEventListener('drop', e=>{ if (e.dataTransfer.files && e.dataTransfer.files[0]) loadImage(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', e=>{ if (e.target.files && e.target.files[0]) loadImage(e.target.files[0]); });
+
+  function setStatus(msg, kind){ statusLine.innerHTML = msg||''; statusLine.className='status-line'+(kind?' '+kind:''); }
+  function setProgress(frac){
+    if (frac==null){ progress.classList.remove('active'); return; }
+    progress.classList.add('active'); progressBar.style.width = Math.round(frac*100)+'%';
+  }
+
+  function imgToCanvas(img){
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img,0,0);
+    return c;
+  }
+  function autoCropToContent(img){
+    const w = img.naturalWidth, h = img.naturalHeight;
+    const sw = Math.min(300, w), sh = Math.max(1, Math.round(sw*h/w));
+    const sc = document.createElement('canvas'); sc.width = sw; sc.height = sh;
+    const sctx = sc.getContext('2d');
+    sctx.drawImage(img, 0, 0, sw, sh);
+    const data = sctx.getImageData(0,0,sw,sh).data;
+
+    const cornerAt = (x,y) => { const i=(y*sw+x)*4; return [data[i],data[i+1],data[i+2]]; };
+    const corners = [cornerAt(0,0), cornerAt(sw-1,0), cornerAt(0,sh-1), cornerAt(sw-1,sh-1)];
+    const bg = [0,1,2].map(k => corners.reduce((s,c)=>s+c[k],0)/4);
+    const thresh = 26;
+    const isBackground = (x,y) => {
+      const i=(y*sw+x)*4;
+      if (data[i+3] < 10) return true;
+      const dr=data[i]-bg[0], dg=data[i+1]-bg[1], db=data[i+2]-bg[2];
+      return Math.sqrt(dr*dr+dg*dg+db*db) < thresh;
+    };
+
+    let minx=sw, miny=sh, maxx=-1, maxy=-1;
+    for (let y=0;y<sh;y++){
+      for (let x=0;x<sw;x++){
+        if (!isBackground(x,y)){ if (x<minx) minx=x; if (x>maxx) maxx=x; if (y<miny) miny=y; if (y>maxy) maxy=y; }
+      }
+    }
+
+    if (maxx<minx || maxy<miny) return {canvas: imgToCanvas(img), cropped:false};
+    const contentW = maxx-minx+1, contentH = maxy-miny+1;
+    if (contentW > sw*0.97 && contentH > sh*0.97) return {canvas: imgToCanvas(img), cropped:false};
+    if (contentW*contentH < 0.45*sw*sh) return {canvas: imgToCanvas(img), cropped:false};
+
+    const padFrac = 0.04;
+    const padX = contentW*padFrac, padY = contentH*padFrac;
+    const cx0 = Math.max(0, minx-padX), cy0 = Math.max(0, miny-padY);
+    const cx1 = Math.min(sw, maxx+1+padX), cy1 = Math.min(sh, maxy+1+padY);
+    const scaleX = w/sw, scaleY = h/sh;
+    const fx0 = Math.round(cx0*scaleX), fy0 = Math.round(cy0*scaleY);
+    const fx1 = Math.round(cx1*scaleX), fy1 = Math.round(cy1*scaleY);
+    const fw = Math.max(1, fx1-fx0), fh = Math.max(1, fy1-fy0);
+
+    const out = document.createElement('canvas'); out.width = fw; out.height = fh;
+    out.getContext('2d').drawImage(img, fx0, fy0, fw, fh, 0, 0, fw, fh);
+    return {canvas: out, cropped:true};
+  }
+
+  function loadImage(file){
+    const nameLower = (file.name||'').toLowerCase();
+    const looksImage = (file.type && file.type.startsWith('image/')) || /\.(jpe?g|png|gif|webp|bmp|svg)$/.test(nameLower);
+    if (!looksImage){ setStatus('That file does not look like an image.', 'err'); return; }
+    if (/\.hei[cf]$/.test(nameLower) || file.type === 'image/heic' || file.type === 'image/heif'){
+      setStatus('HEIC photos usually cannot be decoded in a browser.', 'err');
+      return;
+    }
+    setStatus('Reading file…');
+    const reader = new FileReader();
+    reader.onerror = () => setStatus('Could not read that file from disk.', 'err');
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        if (!img.naturalWidth || !img.naturalHeight){ setStatus('That image loaded with zero size.', 'err'); return; }
+        const doCrop = el('autoCropToggle') ? el('autoCropToggle').checked : true;
+        const { canvas, cropped } = doCrop ? autoCropToContent(img) : {canvas: imgToCanvas(img), cropped:false};
+        state.sourceImg = img;
+        state.img = canvas; state.imgW = canvas.width; state.imgH = canvas.height;
+        placeholder.style.display = 'none';
+        previewCanvas.style.display = 'block';
+        drawRawPreview();
+        state.customColors = [];
+        renderColorPickers();
+        generateBtn.disabled = false;
+        downloadBtn.disabled = true;
+        downloadSTLBtn.disabled = true;
+        state.puzzle = null;
+        const cropNote = cropped ? ' Trimmed the flat/blank margin.' : '';
+        setStatus(`Loaded ${state.imgW}×${state.imgH} image. Colors matched.${cropNote}`, '');
+      };
+      img.onerror = () => setStatus('Browser could not decode this image.', 'err');
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function drawRawPreview(){
+    const c = previewCanvas, ctx = c.getContext('2d');
+    const maxDim = 640;
+    const scale = Math.min(1, maxDim/Math.max(state.imgW, state.imgH));
+    c.width = Math.round(state.imgW*scale); c.height = Math.round(state.imgH*scale);
+    ctx.drawImage(state.img, 0, 0, c.width, c.height);
+  }
+
+  function nextFrame(){ return new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); }
+
+  // ================= main generation pipeline =================
+  generateBtn.addEventListener('click', async () => {
+    if (!state.img) return;
+    generateBtn.disabled = true; downloadBtn.disabled = true; downloadSTLBtn.disabled = true;
+    try {
+      setProgress(0.05); setStatus('Building color palette…'); await nextFrame();
+
+      const K = parseInt(colorsSlider.value,10);
+      const targetPieces = parseInt(piecesSlider.value,10);
+      const rng = mulberry32(1337);
+
+      const workMax = 700;
+      const wscale = Math.min(1, workMax/Math.max(state.imgW, state.imgH));
+      const workW = Math.max(8, Math.round(state.imgW*wscale));
+      const workH = Math.max(8, Math.round(state.imgH*wscale));
+      const work = document.createElement('canvas');
+      work.width = workW; work.height = workH;
+      const wctx = work.getContext('2d');
+      wctx.drawImage(state.img, 0, 0, workW, workH);
+      const imgData = wctx.getImageData(0,0,workW,workH);
+
+      const palette = state.customColors.slice(0, K).map(hexToRgb);
+      const indexMap = nearestAssign(imgData, workW, workH, palette);
+
+      setProgress(0.25); setStatus('Cutting the puzzle grid…'); await nextFrame();
+
+      const gridW = state.imgW, gridH = state.imgH;
+      const aspect = gridW/gridH;
+      let rawPolys = [];
+
+      if (state.shape === 'classic' || state.shape === 'grid'){
+        let cols = Math.max(1, Math.round(Math.sqrt(targetPieces*aspect)));
+        let rows = Math.max(1, Math.round(targetPieces/cols));
+        const cellW = gridW/cols, cellH = gridH/rows;
+        const tabSize = Math.min(cellW, cellH)*0.28;
+        const {H,V} = buildGrid(rows, cols, gridW, gridH, rng, tabSize, state.shape==='classic');
+        for (let r=0;r<rows;r++) for (let c=0;c<cols;c++) rawPolys.push(buildPiecePolygon(H,V,r,c));
+      } else if (state.shape === 'triangle'){
+        const cells = Math.max(1, Math.round(targetPieces/2));
+        let cols = Math.max(1, Math.round(Math.sqrt(cells*aspect)));
+        let rows = Math.max(1, Math.round(cells/cols));
+        rawPolys = generateTrianglePieces(rows, cols, gridW, gridH);
+      } else if (state.shape === 'hexagon'){
+        rawPolys = generateHexPieces(gridW, gridH, targetPieces);
+      }
+
+      setProgress(0.45); setStatus('Triangulating pieces & sampling multi-color layout…'); await nextFrame();
+
+      const detailMM = parseFloat(el('detail') ? el('detail').value : 2.5) || 2.5;
+      const sizeCM = parseFloat(el('sizeCM').value) || 20;
+      const scaleToCM = sizeCM / Math.max(gridW, gridH);
+      const maxEdgeLenPx = (detailMM / 10) / scaleToCM;
+
+      const pieces = [];
+      let triCountEstimate = 0;
+      for (const rawPoly of rawPolys){
+        let poly = rawPoly;
+        if (polygonArea(poly) < 0) poly = poly.slice().reverse();
+        if (poly.length < 3) continue;
+        const initialTris = earClip(poly);
+        if (initialTris.length < 1) continue;
+
+        const subTris = [];
+        for (const triIdxs of initialTris) {
+          const p0 = poly[triIdxs[0]], p1 = poly[triIdxs[1]], p2 = poly[triIdxs[2]];
+          const triResult = [];
+          subdivideTriangle(p0, p1, p2, maxEdgeLenPx, triResult);
+
+          for (const st of triResult) {
+            const cx = (st[0].x + st[1].x + st[2].x) / 3;
+            const cy = (st[0].y + st[1].y + st[2].y) / 3;
+            const wx = Math.min(workW - 1, Math.max(0, Math.round(cx * workW / gridW)));
+            const wy = Math.min(workH - 1, Math.max(0, Math.round(cy * workH / gridH)));
+            const colorIndex = indexMap[wy * workW + wx];
+            subTris.push({ p0: st[0], p1: st[1], p2: st[2], colorIndex });
+          }
+        }
+
+        pieces.push({ poly, subTris });
+        triCountEstimate += subTris.length * 2 + poly.length * 2;
+      }
+
+      state.puzzle = { pieces, w:gridW, h:gridH, palette, K, shape: state.shape };
+
+      setProgress(0.8); setStatus('Rendering preview…'); await nextFrame();
+      renderPreview();
+
+      el('statShape').textContent = state.shape[0].toUpperCase()+state.shape.slice(1);
+      el('statPieces').textContent = pieces.length;
+      el('statTris').textContent = triCountEstimate.toLocaleString();
+
+      setProgress(1); setStatus(`Ready — ${pieces.length} multi-color pieces, ${K} colors.`, 'ok');
+      setTimeout(()=>setProgress(null), 500);
+    } catch (err){
+      console.error(err);
+      setStatus('Something went wrong while generating: '+err.message, 'err');
+      setProgress(null);
+    }
+    generateBtn.disabled = false;
+    downloadBtn.disabled = !state.puzzle;
+    downloadSTLBtn.disabled = !state.puzzle;
+  });
+
+  function renderPreview(){
+    if (state.viewMode === 'assembled') renderAssembledPreview();
+    else renderSheetPreview();
+  }
+
+  function renderAssembledPreview(){
+    if (!state.puzzle) return;
+    const c = previewCanvas, ctx = c.getContext('2d');
+    const p = state.puzzle;
+    const maxDim = 640;
+    const scale = Math.min(1, maxDim/Math.max(p.w, p.h));
+    c.width = Math.round(p.w*scale); c.height = Math.round(p.h*scale);
+    ctx.clearRect(0,0,c.width,c.height);
+    ctx.fillStyle = '#2a2c33';
+    ctx.fillRect(0,0,c.width,c.height);
+
+    for (const piece of p.pieces){
+      for (const st of piece.subTris) {
+        const col = p.palette[st.colorIndex];
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.beginPath();
+        ctx.moveTo(st.p0.x * scale, st.p0.y * scale);
+        ctx.lineTo(st.p1.x * scale, st.p1.y * scale);
+        ctx.lineTo(st.p2.x * scale, st.p2.y * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+
+    ctx.strokeStyle = 'rgba(12,12,15,0.8)'; ctx.lineWidth = 1.25;
+    for (const piece of p.pieces){
+      ctx.beginPath();
+      piece.poly.forEach((pt,i)=>{ const x=pt.x*scale, y=pt.y*scale; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.closePath(); ctx.stroke();
+    }
+  }
+
+  function renderSheetPreview(){
+    if (!state.puzzle) return;
+    const c = previewCanvas, ctx = c.getContext('2d');
+    const p = state.puzzle;
+    const bboxes = p.pieces.map(piece=>{
+      let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+      for (const pt of piece.poly){ minx=Math.min(minx,pt.x); miny=Math.min(miny,pt.y); maxx=Math.max(maxx,pt.x); maxy=Math.max(maxy,pt.y); }
+      return {minx,miny,w:maxx-minx,h:maxy-miny};
+    });
+    const maxW = Math.max(...bboxes.map(b=>b.w)), maxH = Math.max(...bboxes.map(b=>b.h));
+    const gapUnits = maxW*0.12;
+    const layoutCols = Math.max(1, Math.ceil(Math.sqrt(p.pieces.length)));
+    const layoutRows = Math.ceil(p.pieces.length/layoutCols);
+    const sheetW = layoutCols*(maxW+gapUnits), sheetH = layoutRows*(maxH+gapUnits);
+    const maxDim = 640;
+    const scale = Math.min(1, maxDim/Math.max(sheetW, sheetH));
+    c.width = Math.round(sheetW*scale); c.height = Math.round(sheetH*scale);
+    ctx.clearRect(0,0,c.width,c.height);
+
+    p.pieces.forEach((piece, i)=>{
+      const bb = bboxes[i];
+      const lc = i % layoutCols, lr = Math.floor(i/layoutCols);
+      const ox = lc*(maxW+gapUnits) - bb.minx, oy = lr*(maxH+gapUnits) - bb.miny;
+
+      for (const st of piece.subTris) {
+        const col = p.palette[st.colorIndex];
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.beginPath();
+        ctx.moveTo((st.p0.x + ox) * scale, (st.p0.y + oy) * scale);
+        ctx.lineTo((st.p1.x + ox) * scale, (st.p1.y + oy) * scale);
+        ctx.lineTo((st.p2.x + ox) * scale, (st.p2.y + oy) * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(10,10,10,0.6)'; ctx.lineWidth=1;
+      ctx.beginPath();
+      piece.poly.forEach((pt,j)=>{ const x=(pt.x+ox)*scale, y=(pt.y+oy)*scale; if (j===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
+      ctx.closePath(); ctx.stroke();
+    });
+  }
+
+  // ================= 3MF export with Options =================
+  downloadBtn.addEventListener('click', async () => {
+    if (!state.puzzle) return;
+    downloadBtn.disabled = true;
+    setProgress(0.1); setStatus('Building mesh geometry…'); await nextFrame();
+    try {
+      const blob = await buildThreeMF(state.puzzle);
+      setProgress(1); setStatus('Downloading puzzle.3mf …', 'ok');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'puzzle.3mf';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>setProgress(null), 600);
+    } catch (err){
+      console.error(err);
+      setStatus('Export failed: '+err.message, 'err');
+      setProgress(null);
+    }
+    downloadBtn.disabled = false;
+  });
+
+  async function buildThreeMF(puzzle){
+    const sizeCM = parseFloat(el('sizeCM').value) || 20;
+    const thickness = parseFloat(el('thickness').value) || 0.3;
+    const colorDepthCM = parseFloat(el('colorDepth').value) || 0.08;
+    const isAssembled = el('exportAssembled').checked;
+    const gapCM = parseFloat(el('gap').value) || 0.2;
+    const scale = sizeCM/Math.max(puzzle.w, puzzle.h);
+
+    const cmPieces = puzzle.pieces.map(piece => {
+      const poly = piece.poly.map(p => ({ x: p.x * scale, y: p.y * scale }));
+      const subTris = piece.subTris.map(st => ({
+        p0: { x: st.p0.x * scale, y: st.p0.y * scale },
+        p1: { x: st.p1.x * scale, y: st.p1.y * scale },
+        p2: { x: st.p2.x * scale, y: st.p2.y * scale },
+        colorIndex: st.colorIndex
+      }));
+      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+      for (const p of poly) { minx = Math.min(minx, p.x); miny = Math.min(miny, p.y); maxx = Math.max(maxx, p.x); maxy = Math.max(maxy, p.y); }
+      return { poly, subTris, minx, miny, w: maxx - minx, h: maxy - miny };
+    });
+    
+    const maxW = Math.max(...cmPieces.map(p => p.w));
+    const maxH = Math.max(...cmPieces.map(p => p.h));
+    const layoutCols = Math.max(1, Math.ceil(Math.sqrt(cmPieces.length)));
+
+    let objectsXml = '', buildXml = '';
+    let objId = 2;
+
+    cmPieces.forEach((piece, i) => {
+      let ox = 0, oy = 0;
+      if (!isAssembled) {
+        const lc = i % layoutCols, lr = Math.floor(i / layoutCols);
+        const layoutX = lc * (maxW + gapCM), layoutY = lr * (maxH + gapCM);
+        ox = layoutX - piece.minx;
+        oy = layoutY - piece.miny;
+      }
+
+      const pts2D = [];
+      const ptMap = new Map();
+      function getPtIdx(pt) {
+        const key = `${pt.x.toFixed(5)},${pt.y.toFixed(5)}`;
+        if (ptMap.has(key)) return ptMap.get(key);
+        const idx = pts2D.length;
+        pts2D.push(pt);
+        ptMap.set(key, idx);
+        return idx;
+      }
+
+      piece.poly.forEach(getPtIdx);
+      piece.subTris.forEach(st => { getPtIdx(st.p0); getPtIdx(st.p1); getPtIdx(st.p2); });
+      const N = pts2D.length;
+
+      const z0 = 0;
+      const z1 = Math.max(0, thickness - colorDepthCM);
+      const z2 = thickness;
+      
+      let vs = '';
+      for (const p of pts2D) vs += `<vertex x="${(p.x + ox).toFixed(4)}" y="${(p.y + oy).toFixed(4)}" z="${z0.toFixed(4)}"/>`;
+      if (z1 > z0) {
+        for (const p of pts2D) vs += `<vertex x="${(p.x + ox).toFixed(4)}" y="${(p.y + oy).toFixed(4)}" z="${z1.toFixed(4)}"/>`;
+      }
+      for (const p of pts2D) vs += `<vertex x="${(p.x + ox).toFixed(4)}" y="${(p.y + oy).toFixed(4)}" z="${z2.toFixed(4)}"/>`;
+
+      const offsetMid = (z1 > z0) ? N : 0;
+      const offsetTop = (z1 > z0) ? 2 * N : N;
+
+      let ts = '';
+      
+      for (const st of piece.subTris) {
+        const i0 = getPtIdx(st.p0), i1 = getPtIdx(st.p1), i2 = getPtIdx(st.p2);
+        ts += `<triangle v1="${i0}" v2="${i2}" v3="${i1}" p1="0"/>`;
+      }
+
+      for (const st of piece.subTris) {
+        const i0 = getPtIdx(st.p0), i1 = getPtIdx(st.p1), i2 = getPtIdx(st.p2);
+        ts += `<triangle v1="${i0 + offsetTop}" v2="${i1 + offsetTop}" v3="${i2 + offsetTop}" p1="${st.colorIndex + 1}"/>`;
+      }
+
+      const nPoly = piece.poly.length;
+      for (let k = 0; k < nPoly; k++) {
+        const pA = piece.poly[k], pB = piece.poly[(k + 1) % nPoly];
+        const iA = getPtIdx(pA), iB = getPtIdx(pB);
+        
+        const b0 = iA, b1 = iB;
+        const m0 = iA + offsetMid, m1 = iB + offsetMid;
+        const t0 = iA + offsetTop, t1 = iB + offsetTop;
+
+        const midX = (pA.x + pB.x) / 2, midY = (pA.y + pB.y) / 2;
+        let edgeColor = piece.subTris[0] ? piece.subTris[0].colorIndex : 0;
+        let minD = Infinity;
+        for (const st of piece.subTris) {
+          const cx = (st.p0.x + st.p1.x + st.p2.x) / 3, cy = (st.p0.y + st.p1.y + st.p2.y) / 3;
+          const d = (cx - midX) ** 2 + (cy - midY) ** 2;
+          if (d < minD) { minD = d; edgeColor = st.colorIndex; }
+        }
+
+        if (z1 > z0) {
+          ts += `<triangle v1="${b0}" v2="${b1}" v3="${m1}" p1="0"/>`;
+          ts += `<triangle v1="${b0}" v2="${m1}" v3="${m0}" p1="0"/>`;
+        }
+        
+        ts += `<triangle v1="${m0}" v2="${m1}" v3="${t1}" p1="${edgeColor + 1}"/>`;
+        ts += `<triangle v1="${m0}" v2="${t1}" v3="${t0}" p1="${edgeColor + 1}"/>`;
+      }
+
+      objectsXml += `<object id="${objId}" type="model" pid="1" pindex="0"><mesh><vertices>${vs}</vertices><triangles>${ts}</triangles></mesh></object>`;
+      buildXml += `<item objectid="${objId}" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>`;
+      objId++;
+    });
+
+    let baseXml = `<base name="Base Filament" displaycolor="#2A2C33FF"/>`;
+    puzzle.palette.forEach((rgb, i) => { baseXml += `<base name="Color ${i + 1}" displaycolor="${rgbToHex(rgb)}FF"/>`; });
+
+    const modelXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model unit="centimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">
+<resources>
+<basematerials id="1">${baseXml}</basematerials>
+${objectsXml}
+</resources>
+<build>
+${buildXml}
+</build>
+</model>`;
+
+    const contentTypesXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/>
+</Types>`;
+
+    const relsXml =
+`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rel0" Target="/3D/3dmodel.model" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/>
+</Relationships>`;
+
+    const zip = new JSZip();
+    zip.file('[Content_Types].xml', contentTypesXml);
+    zip.folder('_rels').file('.rels', relsXml);
+    zip.folder('3D').file('3dmodel.model', modelXml);
+    return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel' });
+  }
+
+  // ================= ADDED LOGIC FOR STL EXPORT =================
+  downloadSTLBtn.addEventListener('click', () => {
+    if (!state.img) return alert('Please upload a photo first.');
+    downloadSTLBtn.innerText = 'Generating 3D Model...';
+    downloadSTLBtn.disabled = true;
+
+    setTimeout(() => {
+        try {
+            const aspect = state.img.width / state.img.height;
+            const sizeCM = parseFloat(el('sizeCM').value) || 20;
+            const pW = aspect < 1 ? sizeCM * aspect : sizeCM;
+            const pD = aspect < 1 ? sizeCM : sizeCM / aspect;
+
+            const texture = new THREE.CanvasTexture(previewCanvas);
+            const sideMat = new THREE.MeshBasicMaterial({ color: 0x111827 });
+            const topMat = new THREE.MeshBasicMaterial({ map: texture });
+
+            const tempMesh = new THREE.Mesh(
+                new THREE.BoxGeometry(pW, parseFloat(el('thickness').value) || 0.3, pD),
+                [sideMat, sideMat, topMat, sideMat, sideMat, sideMat]
+            );
+
+            const exporter = new THREE.STLExporter();
+            const result = exporter.parse(tempMesh, { binary: true });
+            const blob = new Blob([result], { type: 'application/octet-stream' });
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'Basic_Puzzle.stl';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error generating STL: ' + err.message);
+        } finally {
+            downloadSTLBtn.innerText = 'Download .stl (Basic)';
+            downloadSTLBtn.disabled = false;
+        }
+    }, 100);
+  });
+
+  // init
+  renderColorPickers();
+
+})();
+</script>
+</body>
+</html>
