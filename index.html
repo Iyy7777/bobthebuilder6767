@@ -115,7 +115,7 @@
 <header>
   <div class="eyebrow">Slice · Quantize · Extrude</div>
   <h1>Turn a photo into a <em>printable</em> jigsaw.</h1>
-  <p>Upload an image, pick a piece shape and count, fine-tune the color palette matched to your photo, and this generates a jigsaw as a color-tagged <strong>.3mf</strong> file — each piece pre-colored, laid out flat and separated, ready for your slicer.</p>
+  <p>Upload an image, pick a piece shape and count, fine-tune the color palette matched to your photo, and this generates a jigsaw as a multi-color <strong>.3mf</strong> file. You can export it fully assembled or laid out flat.</p>
 </header>
 
 <main>
@@ -132,7 +132,7 @@
       </div>
       <div id="customThemeField" style="display:none;margin-top:10px;align-items:center;gap:10px;">
         <input type="color" id="customThemeColor" value="#F2A93B">
-        <span class="hint" style="margin:0;">Pick an accent color — the rest of the theme is built around it.</span>
+        <span class="hint" style="margin:0;">Pick an accent color.</span>
       </div>
     </div>
 
@@ -158,25 +158,31 @@
         <div class="pill" data-shape="triangle">Triangle</div>
         <div class="pill" data-shape="hexagon">Hexagon</div>
       </div>
-      <div class="hint" id="shapeHint">Classic pieces have interlocking tabs, like a real jigsaw. Grid, triangle and hexagon pieces have straight edges and don't lock together.</div>
+      <div class="hint" id="shapeHint">Classic pieces have true undercuts so they lock together.</div>
     </div>
 
     <div class="field">
       <label>Pieces (target) <span class="val" id="piecesVal">48</span></label>
       <input type="range" id="pieces" min="6" max="400" step="1" value="48">
-      <div class="hint">The actual piece count may land a little above or below this, depending on the shape and your image's proportions.</div>
+      <div class="hint">The actual piece count may land a little above or below this.</div>
     </div>
 
-    <div class="section-title">03 — Colors</div>
+    <div class="section-title">03 — Colors & Detail</div>
     <div class="field">
       <label>Colors <span class="val" id="colorsVal">12</span></label>
       <input type="range" id="colors" min="2" max="32" step="1" value="12">
-      <div class="hint">Colors are pulled from your photo automatically. Click any swatch to fine-tune it in your system color picker, or re-sync all of them below.</div>
+      <div class="hint">Colors are pulled from your photo automatically.</div>
       <div class="picker-list" id="pickerList"></div>
       <button class="btn-ghost" id="matchColorsBtn" type="button" style="margin-top:12px;">Match colors to photo</button>
     </div>
 
-    <div class="section-title">04 — Physical size</div>
+    <div class="field">
+      <label>Internal Detail Size (mm) <span class="val" id="detailVal">2.5</span></label>
+      <input type="range" id="detail" min="1.0" max="8.0" step="0.5" value="2.5">
+      <div class="hint">Controls the internal color resolution inside each piece.</div>
+    </div>
+
+    <div class="section-title">04 — Physical size & Export</div>
     <div class="field row2">
       <div>
         <label>Longest side (cm)</label>
@@ -187,12 +193,26 @@
         <input type="number" id="thickness" value="0.3" min="0.1" max="1" step="0.05">
       </div>
     </div>
+    
     <div class="field">
-      <label>Gap on print bed (cm) <span class="val" id="gapVal">0.20</span></label>
-      <input type="range" id="gap" min="0.05" max="0.6" step="0.05" value="0.2">
-      <div class="hint">This is <em>not</em> the puzzle fit — the pieces still interlock exactly. It's the empty space left between pieces once they're laid out flat and separated on the print bed, so your slicer can tell them apart and you can pop them off cleanly after printing. Bigger nozzle or first-layer squish → use a bigger gap.</div>
+      <label>Top Color Depth (cm) <span class="val" id="colorDepthVal">0.08</span></label>
+      <input type="range" id="colorDepth" min="0.02" max="0.2" step="0.02" value="0.08">
+      <div class="hint">How thick the top photo layer is. Everything underneath prints in a solid base color to save time.</div>
     </div>
 
+    <div class="field" style="margin-top: 24px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;color:var(--ink);font-size:14px;">
+        <input type="checkbox" id="exportAssembled" checked style="width:auto; cursor:pointer;">
+        <strong>Export assembled (print in place)</strong>
+      </label>
+      <div class="hint">Uncheck this if you want the generator to lay out the pieces separated on a grid.</div>
+    </div>
+
+    <div class="field" id="gapField" style="display:none;">
+      <label>Gap on print bed (cm) <span class="val" id="gapVal">0.20</span></label>
+      <input type="range" id="gap" min="0.05" max="0.6" step="0.05" value="0.2">
+      <div class="hint">The empty space left between separated pieces.</div>
+    </div>
     <button class="btn-primary" id="generateBtn" disabled>Generate puzzle</button>
     <button class="btn-ghost" id="downloadBtn" disabled>Download .3mf</button>
 
@@ -201,7 +221,7 @@
   <div class="stage">
     <div class="tabs-preview">
       <div class="tab-btn active" id="tabAssembled">Assembled preview</div>
-      <div class="tab-btn" id="tabSheet">Print sheet preview</div>
+      <div class="tab-btn" id="tabSheet">Separated preview</div>
     </div>
     <div class="canvas-wrap" id="canvasWrap">
       <div class="placeholder" id="placeholder"><span class="big">✂</span>Upload a photo to begin</div>
@@ -214,13 +234,12 @@
     <div class="stat-bar">
       <div class="stat"><div class="k">Shape</div><div class="v" id="statShape">—</div></div>
       <div class="stat"><div class="k">Piece count</div><div class="v" id="statPieces">—</div></div>
-      <div class="stat"><div class="k">Print sheet</div><div class="v" id="statSheet">—</div></div>
       <div class="stat"><div class="k">Triangles</div><div class="v" id="statTris">—</div></div>
     </div>
   </div>
 </main>
 
-<footer>Runs entirely in your browser — the image never leaves your machine. Object colors are tagged as base materials named "Color 1..N"; assign filaments per group for multi-material printing, or slice single-color and paint by number.</footer>
+<footer>Runs entirely in your browser — the image never leaves your machine. The 3MF exports according to your assembled/separated preference.</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
@@ -273,14 +292,8 @@
     }
     return [r*255,g*255,b*255];
   }
-  function adjustLightness(rgb, deltaL){
-    const [h,s,l] = rgbToHsl(rgb[0],rgb[1],rgb[2]);
-    const nl = Math.max(0.05, Math.min(0.95, l+deltaL));
-    return hslToRgb(h,s,nl);
-  }
-  function lerpColor(a,b,t){ return [a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t]; }
 
-  // ================= generic k-means (any vector dimension) =================
+  // ================= generic k-means =================
   function kmeansCluster(samples, K, rng, iters){
     iters = iters || 8;
     const dim = samples[0].length;
@@ -334,10 +347,6 @@
     return indexMap;
   }
 
-  // Build a palette of K hex colors that best represents the actual photo,
-  // by clustering a downsampled copy of the image with k-means. This is what
-  // seeds the color pickers so the puzzle's default palette matches the photo
-  // instead of an arbitrary rainbow.
   function photoPaletteHexes(K){
     if (!state.img) return null;
     const maxDim = 150;
@@ -356,27 +365,31 @@
     return centroids.map(rgbToHex);
   }
 
-  // ================= piece geometry: classic jigsaw tabs =================
+  // ================= piece geometry =================
   function tabCurve(p0, p1, sign, rng, tabSize){
     const dx = p1.x-p0.x, dy = p1.y-p0.y;
     const len = Math.hypot(dx,dy);
     const ux = dx/len, uy = dy/len;
     const px = -uy, py = ux;
-    const amp = sign * tabSize * (0.9+rng()*0.3);
-    const center = 0.42+rng()*0.16;
-    const neckW = 0.06+rng()*0.03;
-    const bumpW = 0.13+rng()*0.03;
-    const jitter = (rng()-0.5)*tabSize*0.15;
-    const ts   = [0, center-neckW-bumpW, center-bumpW, center-bumpW*0.4, center, center+bumpW*0.4, center+bumpW, center+bumpW+neckW, 1];
-    const offs = [0, 0, amp*0.15, amp*0.95, amp*1.15+jitter, amp*0.95, amp*0.15, 0, 0];
+    
+    // True interlocking mushroom tab with undercuts to physically lock the pieces
+    const amp = sign * tabSize * 0.9; 
+    
+    // Coordinates mapping a perfectly symmetric, round-headed jigsaw ear
+    const ts =   [0, 0.35, 0.40, 0.42, 0.37, 0.31, 0.33, 0.40, 0.50, 0.60, 0.67, 0.69, 0.63, 0.58, 0.60, 0.65, 1];
+    const offs = [0, 0,    0.05, 0.15, 0.30, 0.50, 0.70, 0.85, 0.95, 0.85, 0.70, 0.50, 0.30, 0.15, 0.05, 0,    0];
+
     const pts = [];
-    for (let i=0;i<ts.length;i++){
+    for (let i = 0; i < ts.length; i++){
       const t = ts[i];
-      const bx = p0.x+ux*len*t, by = p0.y+uy*len*t;
-      pts.push({x:bx+px*offs[i], y:by+py*offs[i]});
+      const off = offs[i] * amp; 
+      const bx = p0.x + ux * len * t;
+      const by = p0.y + uy * len * t;
+      pts.push({x: bx + px * off, y: by + py * off});
     }
     return pts;
   }
+  
   function straightLine(p0,p1){ return [p0,p1]; }
   function reversedArr(a){ return a.slice().reverse(); }
 
@@ -406,7 +419,6 @@
     return poly;
   }
 
-  // ================= triangle & hexagon shapes =================
   function generateTrianglePieces(rows, cols, W, H){
     const pt=(r,c)=>({x:c*W/cols, y:r*H/rows});
     const polys=[];
@@ -469,7 +481,7 @@
     return polys;
   }
 
-  // ================= ear-clip triangulation (expects CCW simple polygon) =================
+  // ================= ear-clip triangulation =================
   function isConvexTri(a,b,c){ return ((b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x))>0; }
   function pointInTriangle(p,a,b,c){
     const d1=(p.x-b.x)*(a.y-b.y)-(a.x-b.x)*(p.y-b.y);
@@ -503,38 +515,80 @@
     return tris;
   }
 
+  // Subdivide triangles recursively to achieve fine internal color resolution
+  function subdivideTriangle(a, b, c, maxLen, result) {
+    const dAB = Math.hypot(b.x - a.x, b.y - a.y);
+    const dBC = Math.hypot(c.x - b.x, c.y - b.y);
+    const dCA = Math.hypot(a.x - c.x, a.y - c.y);
+    const maxD = Math.max(dAB, dBC, dCA);
+
+    if (maxD <= maxLen) {
+      result.push([a, b, c]);
+      return;
+    }
+
+    if (maxD === dAB) {
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      subdivideTriangle(a, mid, c, maxLen, result);
+      subdivideTriangle(mid, b, c, maxLen, result);
+    } else if (maxD === dBC) {
+      const mid = { x: (b.x + c.x) / 2, y: (b.y + c.y) / 2 };
+      subdivideTriangle(a, b, mid, maxLen, result);
+      subdivideTriangle(a, mid, c, maxLen, result);
+    } else {
+      const mid = { x: (c.x + a.x) / 2, y: (c.y + a.y) / 2 };
+      subdivideTriangle(a, b, mid, maxLen, result);
+      subdivideTriangle(mid, b, c, maxLen, result);
+    }
+  }
+
   // ================= app state =================
   const state = {
     img:null, imgW:0, imgH:0, sourceImg:null,
     shape:'classic',
     customColors:[],
     puzzle:null,
-    viewMode:'assembled'
+    viewMode: 'assembled'
   };
   const DEFAULT_HUES = [8,45,140,190,260,320,20,90,170,220,290,350];
 
   const el = id => document.getElementById(id);
   const fileInput = el('fileInput'), dropzone = el('dropzone');
-  const piecesSlider = el('pieces'), colorsSlider = el('colors'), gapSlider = el('gap');
-  const piecesVal = el('piecesVal'), colorsVal = el('colorsVal'), gapVal = el('gapVal');
+  const piecesSlider = el('pieces'), colorsSlider = el('colors'), detailSlider = el('detail');
+  const piecesVal = el('piecesVal'), colorsVal = el('colorsVal'), detailVal = el('detailVal');
+  const colorDepthSlider = el('colorDepth'), colorDepthVal = el('colorDepthVal');
   const generateBtn = el('generateBtn'), downloadBtn = el('downloadBtn');
   const previewCanvas = el('previewCanvas'), placeholder = el('placeholder');
   const statusLine = el('statusLine'), progress = el('progress'), progressBar = el('progressBar');
-  const swatchesEl = el('swatches'), pickerListEl = el('pickerList'), matchColorsBtn = el('matchColorsBtn');
+  const pickerListEl = el('pickerList'), matchColorsBtn = el('matchColorsBtn');
   const shapeHint = el('shapeHint');
   const tabAssembled = el('tabAssembled'), tabSheet = el('tabSheet');
+  
+  // New toggles
+  const exportAssembledToggle = el('exportAssembled'), gapField = el('gapField');
+  const gapSlider = el('gap'), gapVal = el('gapVal');
 
   piecesSlider.addEventListener('input', ()=> piecesVal.textContent = piecesSlider.value);
   colorsSlider.addEventListener('input', ()=>{ colorsVal.textContent = colorsSlider.value; renderColorPickers(); });
-  gapSlider.addEventListener('input', ()=> gapVal.textContent = parseFloat(gapSlider.value).toFixed(2));
+  detailSlider.addEventListener('input', ()=> detailVal.textContent = parseFloat(detailSlider.value).toFixed(1));
+  colorDepthSlider.addEventListener('input', ()=> colorDepthVal.textContent = parseFloat(colorDepthSlider.value).toFixed(2));
+  
+  if (gapSlider) {
+    gapSlider.addEventListener('input', ()=> gapVal.textContent = parseFloat(gapSlider.value).toFixed(2));
+  }
+  
+  // Show/Hide Gap field based on Assembled Toggle
+  exportAssembledToggle.addEventListener('change', () => {
+    gapField.style.display = exportAssembledToggle.checked ? 'none' : 'block';
+  });
 
   const shapeHints = {
-    classic: "Classic pieces have interlocking tabs, like a real jigsaw. Grid, triangle and hexagon pieces have straight edges and don't lock together.",
+    classic: "Classic pieces have true undercuts so they lock together.",
     grid: "Straight-edged rectangular pieces — simple squares/rectangles, no interlocking tabs.",
     triangle: "Each grid cell is split into two triangles, alternating direction for a herringbone look.",
     hexagon: "Honeycomb tiling. Edge pieces are clipped to the photo's border, so they may be irregular slivers."
   };
-  // ================= UI theme ("appearance") =================
+
   const THEMES = {
     dark:  { bg:'#121316', panel:'#1A1C21', panel2:'#202329', line:'#2C2F36', ink:'#EDEAE1', inkDim:'#9BA0A8', amber:'#F2A93B', amberDim:'#7A5A25', cyan:'#54D6C9', danger:'#E1614F' },
     light: { bg:'#F7F5F0', panel:'#FFFFFF', panel2:'#F0ECE3', line:'#DCD6C8', ink:'#211D14', inkDim:'#71695A', amber:'#C1611B', amberDim:'#EAC79A', cyan:'#0E8C82', danger:'#C23B2B' },
@@ -564,6 +618,7 @@
     root.setProperty('--cyan', vars.cyan);
     root.setProperty('--danger', vars.danger);
   }
+
   const customThemeField = document.getElementById('customThemeField');
   const customThemeColor = document.getElementById('customThemeColor');
   document.querySelectorAll('#themePills .pill').forEach(p=>{
@@ -589,7 +644,7 @@
   function renderColorPickers(){
     const K = parseInt(colorsSlider.value,10);
     const existing = state.customColors.slice();
-    const suggested = photoPaletteHexes(K); // colors pulled from the actual photo, or null if none loaded yet
+    const suggested = photoPaletteHexes(K);
     pickerListEl.innerHTML = '';
     const colors = [];
     for (let i=0;i<K;i++){
@@ -634,8 +689,19 @@
     setStatus(cropped ? `Trimmed to ${state.imgW}×${state.imgH}. Adjust parameters, then generate.` : `Using the full ${state.imgW}×${state.imgH} photo, untrimmed. Adjust parameters, then generate.`, '');
   });
 
-  tabAssembled.addEventListener('click', ()=>{ state.viewMode='assembled'; tabAssembled.classList.add('active'); tabSheet.classList.remove('active'); if (state.puzzle) renderPreview(); });
-  tabSheet.addEventListener('click', ()=>{ state.viewMode='sheet'; tabSheet.classList.add('active'); tabAssembled.classList.remove('active'); if (state.puzzle) renderPreview(); });
+  // Tab listeners
+  tabAssembled.addEventListener('click', ()=>{ 
+    state.viewMode='assembled'; 
+    tabAssembled.classList.add('active'); 
+    tabSheet.classList.remove('active'); 
+    if (state.puzzle) renderPreview(); 
+  });
+  tabSheet.addEventListener('click', ()=>{ 
+    state.viewMode='sheet'; 
+    tabSheet.classList.add('active'); 
+    tabAssembled.classList.remove('active'); 
+    if (state.puzzle) renderPreview(); 
+  });
 
   dropzone.addEventListener('click', ()=> fileInput.click());
   ['dragover','dragenter'].forEach(ev=> dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.add('drag'); }));
@@ -649,9 +715,6 @@
     progress.classList.add('active'); progressBar.style.width = Math.round(frac*100)+'%';
   }
 
-  // ---- auto-crop away flat/near-transparent margins so the puzzle uses the
-  // whole canvas for actual subject detail, instead of wasting most of the
-  // grid on blank background (like the big white margin around a product photo) ----
   function imgToCanvas(img){
     const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
     c.getContext('2d').drawImage(img,0,0);
@@ -665,14 +728,13 @@
     sctx.drawImage(img, 0, 0, sw, sh);
     const data = sctx.getImageData(0,0,sw,sh).data;
 
-    // Background color = average of the four corners.
     const cornerAt = (x,y) => { const i=(y*sw+x)*4; return [data[i],data[i+1],data[i+2]]; };
     const corners = [cornerAt(0,0), cornerAt(sw-1,0), cornerAt(0,sh-1), cornerAt(sw-1,sh-1)];
     const bg = [0,1,2].map(k => corners.reduce((s,c)=>s+c[k],0)/4);
     const thresh = 26;
     const isBackground = (x,y) => {
       const i=(y*sw+x)*4;
-      if (data[i+3] < 10) return true; // transparent
+      if (data[i+3] < 10) return true;
       const dr=data[i]-bg[0], dg=data[i+1]-bg[1], db=data[i+2]-bg[2];
       return Math.sqrt(dr*dr+dg*dg+db*db) < thresh;
     };
@@ -687,10 +749,6 @@
     if (maxx<minx || maxy<miny) return {canvas: imgToCanvas(img), cropped:false};
     const contentW = maxx-minx+1, contentH = maxy-miny+1;
     if (contentW > sw*0.97 && contentH > sh*0.97) return {canvas: imgToCanvas(img), cropped:false};
-    // Safety floor: if the "content" region looks implausibly small, this is
-    // almost certainly a misdetection (subject color too close to the corner
-    // sample), not a real flat margin. Cropping down to a near-uniform sliver
-    // would collapse the whole palette to one shade, so bail out instead.
     if (contentW*contentH < 0.45*sw*sh) return {canvas: imgToCanvas(img), cropped:false};
 
     const padFrac = 0.04;
@@ -707,7 +765,6 @@
     return {canvas: out, cropped:true};
   }
 
-  // ---- robust image loading: FileReader data URL, tolerant mime check ----
   function loadImage(file){
     const nameLower = (file.name||'').toLowerCase();
     const looksImage = (file.type && file.type.startsWith('image/')) || /\.(jpe?g|png|gif|webp|bmp|svg)$/.test(nameLower);
@@ -800,7 +857,12 @@
         rawPolys = generateHexPieces(gridW, gridH, targetPieces);
       }
 
-      setProgress(0.45); setStatus('Triangulating pieces & sampling color…'); await nextFrame();
+      setProgress(0.45); setStatus('Triangulating pieces & sampling multi-color layout…'); await nextFrame();
+
+      const detailMM = parseFloat(el('detail') ? el('detail').value : 2.5) || 2.5;
+      const sizeCM = parseFloat(el('sizeCM').value) || 20;
+      const scaleToCM = sizeCM / Math.max(gridW, gridH);
+      const maxEdgeLenPx = (detailMM / 10) / scaleToCM;
 
       const pieces = [];
       let triCountEstimate = 0;
@@ -808,33 +870,27 @@
         let poly = rawPoly;
         if (polygonArea(poly) < 0) poly = poly.slice().reverse();
         if (poly.length < 3) continue;
-        const tris = earClip(poly);
-        if (tris.length < 1) continue;
+        const initialTris = earClip(poly);
+        if (initialTris.length < 1) continue;
 
-        let cx=0, cy=0, minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
-        for (const p of poly){ cx+=p.x; cy+=p.y; minx=Math.min(minx,p.x); miny=Math.min(miny,p.y); maxx=Math.max(maxx,p.x); maxy=Math.max(maxy,p.y); }
-        cx/=poly.length; cy/=poly.length;
+        const subTris = [];
+        for (const triIdxs of initialTris) {
+          const p0 = poly[triIdxs[0]], p1 = poly[triIdxs[1]], p2 = poly[triIdxs[2]];
+          const triResult = [];
+          subdivideTriangle(p0, p1, p2, maxEdgeLenPx, triResult);
 
-        const wx = Math.min(workW-1, Math.max(0, Math.round(cx*workW/gridW)));
-        const wy = Math.min(workH-1, Math.max(0, Math.round(cy*workH/gridH)));
-        const radMM = Math.max(maxx-minx, maxy-miny)/2;
-        const rad = Math.max(1, Math.round(radMM * (workW/gridW) * 0.55));
-        const counts = new Array(K).fill(0);
-        // Dense sampling (every work-pixel under the piece, not a sparse grid)
-        // so each piece's color reflects the actual photo detail beneath it,
-        // not just a handful of spot-checks.
-        for (let dy=-rad; dy<=rad; dy++){
-          for (let dx=-rad; dx<=rad; dx++){
-            const sx = Math.min(workW-1, Math.max(0, wx+dx));
-            const sy = Math.min(workH-1, Math.max(0, wy+dy));
-            counts[indexMap[sy*workW+sx]]++;
+          for (const st of triResult) {
+            const cx = (st[0].x + st[1].x + st[2].x) / 3;
+            const cy = (st[0].y + st[1].y + st[2].y) / 3;
+            const wx = Math.min(workW - 1, Math.max(0, Math.round(cx * workW / gridW)));
+            const wy = Math.min(workH - 1, Math.max(0, Math.round(cy * workH / gridH)));
+            const colorIndex = indexMap[wy * workW + wx];
+            subTris.push({ p0: st[0], p1: st[1], p2: st[2], colorIndex });
           }
         }
-        let colorIndex=0, best=-1;
-        for (let k=0;k<K;k++) if (counts[k]>best){ best=counts[k]; colorIndex=k; }
 
-        pieces.push({poly, tris, colorIndex});
-        triCountEstimate += tris.length*2 + poly.length*2;
+        pieces.push({ poly, subTris });
+        triCountEstimate += subTris.length * 2 + poly.length * 2;
       }
 
       state.puzzle = { pieces, w:gridW, h:gridH, palette, K, shape: state.shape };
@@ -846,20 +902,7 @@
       el('statPieces').textContent = pieces.length;
       el('statTris').textContent = triCountEstimate.toLocaleString();
 
-      const sizeCM = parseFloat(el('sizeCM').value) || 20;
-      const scaleToCM = sizeCM/Math.max(gridW, gridH);
-      const gapCM = parseFloat(gapSlider.value);
-      const bboxes = pieces.map(p=>{
-        let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
-        for (const pt of p.poly){ minx=Math.min(minx,pt.x); miny=Math.min(miny,pt.y); maxx=Math.max(maxx,pt.x); maxy=Math.max(maxy,pt.y); }
-        return {w:(maxx-minx)*scaleToCM, h:(maxy-miny)*scaleToCM};
-      });
-      const maxW = Math.max(...bboxes.map(b=>b.w)), maxH = Math.max(...bboxes.map(b=>b.h));
-      const layoutCols = Math.max(1, Math.ceil(Math.sqrt(pieces.length)));
-      const layoutRows = Math.ceil(pieces.length/layoutCols);
-      el('statSheet').textContent = `${(layoutCols*(maxW+gapCM)).toFixed(1)} × ${(layoutRows*(maxH+gapCM)).toFixed(1)} cm`;
-
-      setProgress(1); setStatus(`Ready — ${pieces.length} pieces, ${K} colors.`, 'ok');
+      setProgress(1); setStatus(`Ready — ${pieces.length} multi-color pieces, ${K} colors.`, 'ok');
       setTimeout(()=>setProgress(null), 500);
     } catch (err){
       console.error(err);
@@ -870,42 +913,35 @@
     downloadBtn.disabled = !state.puzzle;
   });
 
-  function renderSwatches(palette){
-    swatchesEl.innerHTML = '';
-    palette.forEach(rgb=>{
-      const d = document.createElement('div');
-      d.className = 'swatch';
-      d.style.background = `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
-      d.title = rgbToHex(rgb);
-      swatchesEl.appendChild(d);
-    });
-  }
-
   function renderPreview(){
     if (state.viewMode === 'assembled') renderAssembledPreview();
     else renderSheetPreview();
   }
 
   function renderAssembledPreview(){
+    if (!state.puzzle) return;
     const c = previewCanvas, ctx = c.getContext('2d');
     const p = state.puzzle;
     const maxDim = 640;
     const scale = Math.min(1, maxDim/Math.max(p.w, p.h));
     c.width = Math.round(p.w*scale); c.height = Math.round(p.h*scale);
     ctx.clearRect(0,0,c.width,c.height);
-    // Solid backdrop so light/white pieces stay visible instead of blending
-    // into the transparency checkerboard — without this, a fully tiled,
-    // properly-interlocking puzzle can look like scattered disconnected
-    // shapes just because you can't see where light pieces actually are.
     ctx.fillStyle = '#2a2c33';
     ctx.fillRect(0,0,c.width,c.height);
+
     for (const piece of p.pieces){
-      const col = p.palette[piece.colorIndex];
-      ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
-      ctx.beginPath();
-      piece.poly.forEach((pt,i)=>{ const x=pt.x*scale, y=pt.y*scale; if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-      ctx.closePath(); ctx.fill();
+      for (const st of piece.subTris) {
+        const col = p.palette[st.colorIndex];
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.beginPath();
+        ctx.moveTo(st.p0.x * scale, st.p0.y * scale);
+        ctx.lineTo(st.p1.x * scale, st.p1.y * scale);
+        ctx.lineTo(st.p2.x * scale, st.p2.y * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
     }
+
     ctx.strokeStyle = 'rgba(12,12,15,0.8)'; ctx.lineWidth = 1.25;
     for (const piece of p.pieces){
       ctx.beginPath();
@@ -915,6 +951,7 @@
   }
 
   function renderSheetPreview(){
+    if (!state.puzzle) return;
     const c = previewCanvas, ctx = c.getContext('2d');
     const p = state.puzzle;
     const bboxes = p.pieces.map(piece=>{
@@ -923,7 +960,7 @@
       return {minx,miny,w:maxx-minx,h:maxy-miny};
     });
     const maxW = Math.max(...bboxes.map(b=>b.w)), maxH = Math.max(...bboxes.map(b=>b.h));
-    const gapUnits = maxW*0.12;
+    const gapUnits = maxW*0.12; // visual gap for preview
     const layoutCols = Math.max(1, Math.ceil(Math.sqrt(p.pieces.length)));
     const layoutRows = Math.ceil(p.pieces.length/layoutCols);
     const sheetW = layoutCols*(maxW+gapUnits), sheetH = layoutRows*(maxH+gapUnits);
@@ -931,20 +968,31 @@
     const scale = Math.min(1, maxDim/Math.max(sheetW, sheetH));
     c.width = Math.round(sheetW*scale); c.height = Math.round(sheetH*scale);
     ctx.clearRect(0,0,c.width,c.height);
+
     p.pieces.forEach((piece, i)=>{
       const bb = bboxes[i];
       const lc = i % layoutCols, lr = Math.floor(i/layoutCols);
       const ox = lc*(maxW+gapUnits) - bb.minx, oy = lr*(maxH+gapUnits) - bb.miny;
-      const col = p.palette[piece.colorIndex];
-      ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+
+      for (const st of piece.subTris) {
+        const col = p.palette[st.colorIndex];
+        ctx.fillStyle = `rgb(${col[0]},${col[1]},${col[2]})`;
+        ctx.beginPath();
+        ctx.moveTo((st.p0.x + ox) * scale, (st.p0.y + oy) * scale);
+        ctx.lineTo((st.p1.x + ox) * scale, (st.p1.y + oy) * scale);
+        ctx.lineTo((st.p2.x + ox) * scale, (st.p2.y + oy) * scale);
+        ctx.closePath();
+        ctx.fill();
+      }
+
+      ctx.strokeStyle = 'rgba(10,10,10,0.6)'; ctx.lineWidth=1;
       ctx.beginPath();
       piece.poly.forEach((pt,j)=>{ const x=(pt.x+ox)*scale, y=(pt.y+oy)*scale; if (j===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); });
-      ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = 'rgba(10,10,10,0.6)'; ctx.lineWidth=1; ctx.stroke();
+      ctx.closePath(); ctx.stroke();
     });
   }
 
-  // ================= 3MF export =================
+  // ================= 3MF export with Options =================
   downloadBtn.addEventListener('click', async () => {
     if (!state.puzzle) return;
     downloadBtn.disabled = true;
@@ -968,48 +1016,124 @@
   async function buildThreeMF(puzzle){
     const sizeCM = parseFloat(el('sizeCM').value) || 20;
     const thickness = parseFloat(el('thickness').value) || 0.3;
-    const gapCM = parseFloat(gapSlider.value) || 0.2;
+    const colorDepthCM = parseFloat(el('colorDepth').value) || 0.08;
+    const isAssembled = el('exportAssembled').checked;
+    const gapCM = parseFloat(el('gap').value) || 0.2;
     const scale = sizeCM/Math.max(puzzle.w, puzzle.h);
 
-    const cmPieces = puzzle.pieces.map(piece=>{
-      const poly = piece.poly.map(p=>({x:p.x*scale, y:p.y*scale}));
-      let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
-      for (const p of poly){ minx=Math.min(minx,p.x); miny=Math.min(miny,p.y); maxx=Math.max(maxx,p.x); maxy=Math.max(maxy,p.y); }
-      return { poly, tris:piece.tris, colorIndex:piece.colorIndex, minx, miny, w:maxx-minx, h:maxy-miny };
+    const cmPieces = puzzle.pieces.map(piece => {
+      const poly = piece.poly.map(p => ({ x: p.x * scale, y: p.y * scale }));
+      const subTris = piece.subTris.map(st => ({
+        p0: { x: st.p0.x * scale, y: st.p0.y * scale },
+        p1: { x: st.p1.x * scale, y: st.p1.y * scale },
+        p2: { x: st.p2.x * scale, y: st.p2.y * scale },
+        colorIndex: st.colorIndex
+      }));
+      let minx = Infinity, miny = Infinity, maxx = -Infinity, maxy = -Infinity;
+      for (const p of poly) { minx = Math.min(minx, p.x); miny = Math.min(miny, p.y); maxx = Math.max(maxx, p.x); maxy = Math.max(maxy, p.y); }
+      return { poly, subTris, minx, miny, w: maxx - minx, h: maxy - miny };
     });
-    const maxW = Math.max(...cmPieces.map(p=>p.w));
-    const maxH = Math.max(...cmPieces.map(p=>p.h));
+    
+    const maxW = Math.max(...cmPieces.map(p => p.w));
+    const maxH = Math.max(...cmPieces.map(p => p.h));
     const layoutCols = Math.max(1, Math.ceil(Math.sqrt(cmPieces.length)));
 
     let objectsXml = '', buildXml = '';
     let objId = 2;
 
-    cmPieces.forEach((piece, i)=>{
-      const n = piece.poly.length;
-      const lc = i % layoutCols, lr = Math.floor(i/layoutCols);
-      const layoutX = lc*(maxW+gapCM), layoutY = lr*(maxH+gapCM);
-      const ox = layoutX - piece.minx, oy = layoutY - piece.miny;
-
-      let vs = '';
-      for (const p of piece.poly) vs += `<vertex x="${(p.x+ox).toFixed(4)}" y="${(p.y+oy).toFixed(4)}" z="0"/>`;
-      for (const p of piece.poly) vs += `<vertex x="${(p.x+ox).toFixed(4)}" y="${(p.y+oy).toFixed(4)}" z="${thickness.toFixed(4)}"/>`;
-
-      let ts = '';
-      for (const t of piece.tris) ts += `<triangle v1="${t[0]}" v2="${t[2]}" v3="${t[1]}"/>`;
-      for (const t of piece.tris) ts += `<triangle v1="${t[0]+n}" v2="${t[1]+n}" v3="${t[2]+n}"/>`;
-      for (let i2=0;i2<n;i2++){
-        const j2=(i2+1)%n, b0=i2, b1=j2, t0=i2+n, t1=j2+n;
-        ts += `<triangle v1="${b0}" v2="${b1}" v3="${t1}"/>`;
-        ts += `<triangle v1="${b0}" v2="${t1}" v3="${t0}"/>`;
+    cmPieces.forEach((piece, i) => {
+      
+      let ox = 0, oy = 0;
+      if (!isAssembled) {
+        // Calculate separated grid position based on gap slider
+        const lc = i % layoutCols, lr = Math.floor(i / layoutCols);
+        const layoutX = lc * (maxW + gapCM), layoutY = lr * (maxH + gapCM);
+        ox = layoutX - piece.minx;
+        oy = layoutY - piece.miny;
       }
 
-      objectsXml += `<object id="${objId}" type="model" pid="1" pindex="${piece.colorIndex}"><mesh><vertices>${vs}</vertices><triangles>${ts}</triangles></mesh></object>`;
+      const pts2D = [];
+      const ptMap = new Map();
+      function getPtIdx(pt) {
+        const key = `${pt.x.toFixed(5)},${pt.y.toFixed(5)}`;
+        if (ptMap.has(key)) return ptMap.get(key);
+        const idx = pts2D.length;
+        pts2D.push(pt);
+        ptMap.set(key, idx);
+        return idx;
+      }
+
+      piece.poly.forEach(getPtIdx);
+      piece.subTris.forEach(st => { getPtIdx(st.p0); getPtIdx(st.p1); getPtIdx(st.p2); });
+      const N = pts2D.length;
+
+      // Calculate Z levels
+      const z0 = 0;
+      const z1 = Math.max(0, thickness - colorDepthCM);
+      const z2 = thickness;
+      
+      let vs = '';
+      for (const p of pts2D) vs += `<vertex x="${(p.x + ox).toFixed(4)}" y="${(p.y + oy).toFixed(4)}" z="${z0.toFixed(4)}"/>`;
+      if (z1 > z0) {
+        for (const p of pts2D) vs += `<vertex x="${(p.x + ox).toFixed(4)}" y="${(p.y + oy).toFixed(4)}" z="${z1.toFixed(4)}"/>`;
+      }
+      for (const p of pts2D) vs += `<vertex x="${(p.x + ox).toFixed(4)}" y="${(p.y + oy).toFixed(4)}" z="${z2.toFixed(4)}"/>`;
+
+      const offsetMid = (z1 > z0) ? N : 0;
+      const offsetTop = (z1 > z0) ? 2 * N : N;
+
+      let ts = '';
+      
+      // Bottom face sub-triangles (Base Color: ID 0)
+      for (const st of piece.subTris) {
+        const i0 = getPtIdx(st.p0), i1 = getPtIdx(st.p1), i2 = getPtIdx(st.p2);
+        ts += `<triangle v1="${i0}" v2="${i2}" v3="${i1}" p1="0"/>`;
+      }
+
+      // Top face sub-triangles (Photo Color: ID st.colorIndex + 1)
+      for (const st of piece.subTris) {
+        const i0 = getPtIdx(st.p0), i1 = getPtIdx(st.p1), i2 = getPtIdx(st.p2);
+        ts += `<triangle v1="${i0 + offsetTop}" v2="${i1 + offsetTop}" v3="${i2 + offsetTop}" p1="${st.colorIndex + 1}"/>`;
+      }
+
+      // Side wall quads along outer boundary
+      const nPoly = piece.poly.length;
+      for (let k = 0; k < nPoly; k++) {
+        const pA = piece.poly[k], pB = piece.poly[(k + 1) % nPoly];
+        const iA = getPtIdx(pA), iB = getPtIdx(pB);
+        
+        const b0 = iA, b1 = iB;
+        const m0 = iA + offsetMid, m1 = iB + offsetMid;
+        const t0 = iA + offsetTop, t1 = iB + offsetTop;
+
+        const midX = (pA.x + pB.x) / 2, midY = (pA.y + pB.y) / 2;
+        let edgeColor = piece.subTris[0] ? piece.subTris[0].colorIndex : 0;
+        let minD = Infinity;
+        for (const st of piece.subTris) {
+          const cx = (st.p0.x + st.p1.x + st.p2.x) / 3, cy = (st.p0.y + st.p1.y + st.p2.y) / 3;
+          const d = (cx - midX) ** 2 + (cy - midY) ** 2;
+          if (d < minD) { minD = d; edgeColor = st.colorIndex; }
+        }
+
+        if (z1 > z0) {
+          // Lower side wall block (Base Color: ID 0)
+          ts += `<triangle v1="${b0}" v2="${b1}" v3="${m1}" p1="0"/>`;
+          ts += `<triangle v1="${b0}" v2="${m1}" v3="${m0}" p1="0"/>`;
+        }
+        
+        // Upper side wall block (Photo edge color: ID edgeColor + 1)
+        ts += `<triangle v1="${m0}" v2="${m1}" v3="${t1}" p1="${edgeColor + 1}"/>`;
+        ts += `<triangle v1="${m0}" v2="${t1}" v3="${t0}" p1="${edgeColor + 1}"/>`;
+      }
+
+      objectsXml += `<object id="${objId}" type="model" pid="1" pindex="0"><mesh><vertices>${vs}</vertices><triangles>${ts}</triangles></mesh></object>`;
       buildXml += `<item objectid="${objId}" transform="1 0 0 0 1 0 0 0 1 0 0 0"/>`;
       objId++;
     });
 
-    let baseXml = '';
-    puzzle.palette.forEach((rgb,i)=>{ baseXml += `<base name="Color ${i+1}" displaycolor="${rgbToHex(rgb)}FF"/>`; });
+    // Material 0 is the Base Filament. Materials 1+ are from the photo.
+    let baseXml = `<base name="Base Filament" displaycolor="#2A2C33FF"/>`;
+    puzzle.palette.forEach((rgb, i) => { baseXml += `<base name="Color ${i + 1}" displaycolor="${rgbToHex(rgb)}FF"/>`; });
 
     const modelXml =
 `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -1040,7 +1164,7 @@ ${buildXml}
     zip.file('[Content_Types].xml', contentTypesXml);
     zip.folder('_rels').file('.rels', relsXml);
     zip.folder('3D').file('3dmodel.model', modelXml);
-    return await zip.generateAsync({type:'blob', mimeType:'application/vnd.ms-package.3dmanufacturing-3dmodel'});
+    return await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.ms-package.3dmanufacturing-3dmodel' });
   }
 
   // init
@@ -1050,4 +1174,3 @@ ${buildXml}
 </script>
 </body>
 </html>
-## test
